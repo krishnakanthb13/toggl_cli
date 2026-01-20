@@ -36,6 +36,7 @@
 - ✅ Billable time tracking
 - ✅ **On-the-fly creation** - Press P/T to create projects/tags while starting timer
 - ✅ Auto-logging to `toggl_cli_logs.txt`
+- ✅ **New:** AI-Powered Web Reviewer to analyze your logs
 - ✅ Simple number-based menu (no typing long commands!)
 
 ---
@@ -90,9 +91,11 @@ The Toggl CLI consists of the following files:
 | File | Description |
 |------|-------------|
 | `toggl_cli.py` | Main Python application |
-| `toggl_cli.bat` | Windows launcher |
+| `toggl_cli.bat` | Windows launcher with menu |
 | `toggl_config.json` | Auto-created; stores API token and cache |
 | `toggl_cli_logs.txt` | Auto-created; timestamped activity log |
+| `toggl_cli_review.html` | AI-powered Web Reviewer interface |
+| `toggl_cli_review.bat` | Standalone launcher for the Reviewer |
 
 ### Documentation
 
@@ -118,10 +121,11 @@ The Toggl CLI consists of the following files:
 ### Step 2: Run the CLI
 
 **Windows:**
-```batch
-cd C:\Toggl
-toggl_cli.bat
-```
+1. Run `toggl_cli.bat`
+2. You will see a launcher menu:
+   - **Option 1:** Run Toggl CLI (The main python tool)
+   - **Option 2:** Reviewer - Toggl Reports (Web UI on Port 8086)
+3. Select `1` to start the CLI.
 
 **Mac/Linux:**
 ```bash

@@ -1,5 +1,18 @@
 # Release Notes
 
+## v1.1.0 - AI Reviewer Update (January 2026)
+
+### 🤖 AI-Powered Log Reviewer
+
+Analyze your productivity with the new AI Reviewer web interface.
+
+- **Offline-First Web UI**: View your local `toggl_cli_logs.txt` with a beautiful calendar interface.
+- **AI Token Integration**: Use Google Gemini to generate daily summaries of your work.
+- **Smart Grouping**: View entries by Year, Month, and Date.
+- **Dedicated Launcher**: New menu in `toggl_cli.bat` to launch the reviewer on Port 8086.
+
+---
+
 ## v1.0.0 - Initial Release (January 2026)
 
 ### 🎉 First Public Release
