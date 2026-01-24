@@ -7,9 +7,9 @@ echo ============================================================
 echo                  Toggl CLI Manager
 echo ============================================================
 echo.
-echo  1. Run Toggl CLI (Interactive)
-echo  2. Reviewer - Toggl Reports (Port 8086)
-echo  0. Exit
+echo     1. Run Toggl CLI (Interactive)
+echo     2. Reviewer - Toggl Reports (Port 8086)
+echo     0. Exit
 echo.
 set /p choice="Enter your choice (0-2): "
 

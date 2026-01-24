@@ -25,6 +25,10 @@ class TogglCLI:
         self.user_data = None
         self.cached_projects = []  # Cached projects list
         self.cached_tags = []      # Cached tags list
+        self.cached_organizations = []  # Cached organizations
+        self.cached_clients = []   # Cached clients
+        self.cached_tasks = []     # Cached tasks
+        self.cached_workspaces = []  # Cached workspaces
         self.load_config()
         self._start_session_log()
 
@@ -38,6 +42,10 @@ class TogglCLI:
                     self.workspace_id = config.get('workspace_id')
                     self.cached_projects = config.get('cached_projects', [])
                     self.cached_tags = config.get('cached_tags', [])
+                    self.cached_organizations = config.get('cached_organizations', [])
+                    self.cached_clients = config.get('cached_clients', [])
+                    self.cached_tasks = config.get('cached_tasks', [])
+                    self.cached_workspaces = config.get('cached_workspaces', [])
             except Exception as e:
                 self.log(f"Error loading config: {e}")
 
@@ -56,7 +64,11 @@ class TogglCLI:
                 'api_token': self.api_token,
                 'workspace_id': self.workspace_id,
                 'cached_projects': self.cached_projects,
-                'cached_tags': self.cached_tags
+                'cached_tags': self.cached_tags,
+                'cached_organizations': self.cached_organizations,
+                'cached_clients': self.cached_clients,
+                'cached_tasks': self.cached_tasks,
+                'cached_workspaces': self.cached_workspaces
             }
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(config, f, indent=2)
@@ -1063,6 +1075,605 @@ class TogglCLI:
         total_mins = (total_duration % 3600) // 60
         print(f"\nTotal: {total_hours}h {total_mins}m")
 
+    def list_tasks(self):
+        """List all tasks from projects user participates in"""
+        if not self.workspace_id:
+            print("✗ Please login first")
+            return
+
+        # Check if we have cached tasks
+        if self.cached_tasks:
+            print("\n⚡ Using cached tasks data...")
+            tasks = self.cached_tasks
+        else:
+            print("\n⏳ Fetching tasks from Toggl...")
+            tasks = self.api_request('GET', '/me/tasks')
+            
+            if tasks:
+                # Cache the tasks
+                self.cached_tasks = tasks
+                self.save_config(silent=True)
+                print("✓ Tasks cached for future use")
+        
+        if not tasks:
+            print("ℹ No tasks found")
+            return
+
+        print("\n=== YOUR TASKS ===")
+        # Group tasks by project
+        tasks_by_project = {}
+        for task in tasks:
+            project_id = task.get('project_id')
+            project_name = self._get_project_name(project_id)
+            if project_name not in tasks_by_project:
+                tasks_by_project[project_name] = []
+            tasks_by_project[project_name].append(task)
+        
+        for project_name, project_tasks in sorted(tasks_by_project.items()):
+            print(f"\n📁 {project_name}:")
+            for task in project_tasks:
+                active = "✓" if task.get('active', True) else "✗"
+                estimated = f" (est: {task.get('estimated_seconds', 0) // 3600}h)" if task.get('estimated_seconds') else ""
+                print(f"  • {task['name']} [{active}]{estimated}")
+        
+        print(f"\n✓ Total tasks: {len(tasks)}")
+        print("💡 Tip: Use option 7 in Settings to refresh cache")
+
+    def list_clients(self):
+        """List all clients"""
+        if not self.workspace_id:
+            print("✗ Please login first")
+            return
+
+        # Check if we have cached clients
+        if self.cached_clients:
+            print("\n⚡ Using cached clients data...")
+            clients = self.cached_clients
+        else:
+            print("\n⏳ Fetching clients from Toggl...")
+            clients = self.api_request('GET', '/me/clients')
+            
+            if clients:
+                # Cache the clients
+                self.cached_clients = clients
+                self.save_config(silent=True)
+                print("✓ Clients cached for future use")
+        
+        if not clients:
+            print("ℹ No clients found")
+            return
+
+        print("\n=== YOUR CLIENTS ===")
+        for idx, client in enumerate(clients, 1):
+            print(f"{idx}. {client['name']}")
+        
+        print(f"\n✓ Total clients: {len(clients)}")
+        self.log(f"(List): {len(clients)} clients")
+        print("💡 Tip: Use option 7 in Settings to refresh cache")
+
+    def check_api_quota(self):
+        """Display API quota status"""
+        if not self.workspace_id:
+            print("✗ Please login first")
+            return
+
+        print("\n⏳ Checking API quota...")
+        quota_data = self.api_request('GET', '/me/quota')
+        
+        if not quota_data:
+            print("✗ Could not fetch API quota information")
+            return
+
+        # Use cached organizations if available
+        if self.cached_organizations:
+            print("⚡ Using cached organizations data...")
+            orgs = self.cached_organizations
+        else:
+            print("⏳ Fetching organizations...")
+            orgs = self.api_request('GET', '/me/organizations')
+            
+            if orgs:
+                # Cache the organizations
+                self.cached_organizations = orgs
+                self.save_config(silent=True)
+        
+        # Create a mapping of organization_id to name
+        org_names = {}
+        if orgs:
+            for org in orgs:
+                org_id = org.get('id')
+                org_name = org.get('name', 'Unknown')
+                if org_id:
+                    org_names[org_id] = org_name
+
+        print("\n=== API QUOTA STATUS ===")
+        
+        # The API returns quota info per organization
+        if isinstance(quota_data, list):
+            for quota_item in quota_data:
+                org_id = quota_item.get('organization_id')
+                
+                # Determine the display name
+                if org_id is None:
+                    display_name = "User Specific Requests Quota"
+                elif org_id in org_names:
+                    display_name = org_names[org_id]
+                else:
+                    display_name = f"Organization ID: {org_id}"
+                
+                # Get quota values
+                remaining = quota_item.get('remaining', 0)
+                total = quota_item.get('total', 0)
+                used = total - remaining
+                resets_in_secs = quota_item.get('resets_in_secs', 0)
+                
+                # Display quota information
+                print(f"\n📊 {display_name}")
+                print(f"   Used: {used} / {total} requests")
+                print(f"   Remaining: {remaining}")
+                
+                # Convert reset time to human-readable format
+                if resets_in_secs > 0:
+                    hours = resets_in_secs // 3600
+                    minutes = (resets_in_secs % 3600) // 60
+                    seconds = resets_in_secs % 60
+                    
+                    if hours > 0:
+                        reset_str = f"{hours}h {minutes}m"
+                    elif minutes > 0:
+                        reset_str = f"{minutes}m {seconds}s"
+                    else:
+                        reset_str = f"{seconds}s"
+                    
+                    print(f"   Resets in: {reset_str}")
+                
+                # Warning if low
+                if remaining < 5:
+                    print("   ⚠️  Warning: Low quota remaining!")
+        else:
+            # Handle non-list response
+            print("\n📊 Quota Information:")
+            if isinstance(quota_data, dict):
+                for key, value in quota_data.items():
+                    print(f"  {key}: {value}")
+            else:
+                print(f"  {quota_data}")
+        
+        self.log("(Check): API quota")
+
+    def list_projects_paginated(self):
+        """List projects with pagination support (better for large project lists)"""
+        if not self.workspace_id:
+            print("✗ Please login first")
+            return
+
+        print("\n⏳ Fetching projects (paginated)...")
+        
+        # Start with first page
+        page = 1
+        per_page = 50
+        all_projects = []
+        
+        while True:
+            endpoint = f'/me/projects/paginated?page={page}&per_page={per_page}'
+            response = self.api_request('GET', endpoint)
+            
+            if not response:
+                break
+            
+            # The paginated endpoint returns projects in a different format
+            projects = response if isinstance(response, list) else response.get('data', [])
+            
+            if not projects:
+                break
+            
+            all_projects.extend(projects)
+            
+            # Check if there are more pages
+            if len(projects) < per_page:
+                break
+            
+            page += 1
+        
+        if not all_projects:
+            print("ℹ No projects found")
+            return
+
+        print("\n=== YOUR PROJECTS (Paginated) ===")
+        for idx, project in enumerate(all_projects, 1):
+            active = "✓" if project.get('active', True) else "✗"
+            client_name = f" (Client: {project.get('client_name', 'None')})" if project.get('client_name') else ""
+            print(f"{idx}. {project['name']} [{active}]{client_name}")
+        
+        print(f"\n✓ Total projects: {len(all_projects)} (loaded across {page} page(s))")
+        
+        # Update cache
+        self.cached_projects = all_projects
+        self.save_config(silent=True)
+        print("✓ Cache updated")
+
+    def update_user_profile(self):
+        """Update user profile settings"""
+        if not self.api_token:
+            print("✗ Please login first")
+            return
+
+        print("\n=== UPDATE USER PROFILE ===")
+        print("Leave blank to keep current value\n")
+        
+        # Get current user data
+        current_user = self.api_request('GET', '/me')
+        if not current_user:
+            print("✗ Could not fetch current user data")
+            return
+        
+        print(f"Current name: {current_user.get('fullname', 'N/A')}")
+        print(f"Current email: {current_user.get('email', 'N/A')}")
+        print(f"Current timezone: {current_user.get('timezone', 'N/A')}")
+        print(f"Current week start: {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][current_user.get('beginning_of_week', 0)]}")
+        
+        print("\n=== WHAT TO UPDATE? ===")
+        print("  1. Full Name")
+        print("  2. Email")
+        print("  3. Timezone")
+        print("  4. Week Start Day")
+        print("  5. Default Workspace")
+        print("  0. Cancel")
+        
+        choice = input("\nSelect option: ").strip()
+        
+        update_data = {}
+        
+        if choice == '1':
+            new_name = input("New full name: ").strip()
+            if new_name:
+                update_data['fullname'] = new_name
+        
+        elif choice == '2':
+            new_email = input("New email: ").strip()
+            if new_email:
+                update_data['email'] = new_email
+                print("⚠️  Note: You may need to verify the new email")
+        
+        elif choice == '3':
+            print("\nCommon timezones:")
+            print("  - America/New_York")
+            print("  - America/Los_Angeles")
+            print("  - Europe/London")
+            print("  - Europe/Paris")
+            print("  - Asia/Tokyo")
+            print("  - Australia/Sydney")
+            new_tz = input("\nNew timezone: ").strip()
+            if new_tz:
+                update_data['timezone'] = new_tz
+        
+        elif choice == '4':
+            print("\n0. Sunday")
+            print("1. Monday")
+            print("2. Tuesday")
+            print("3. Wednesday")
+            print("4. Thursday")
+            print("5. Friday")
+            print("6. Saturday")
+            day_choice = input("\nSelect day (0-6): ").strip()
+            try:
+                day_num = int(day_choice)
+                if 0 <= day_num <= 6:
+                    update_data['beginning_of_week'] = day_num
+                else:
+                    print("✗ Invalid day number")
+                    return
+            except ValueError:
+                print("✗ Please enter a number")
+                return
+        
+        elif choice == '5':
+            # Get workspaces
+            workspaces = self.api_request('GET', '/me/workspaces')
+            if workspaces:
+                print("\n=== SELECT DEFAULT WORKSPACE ===")
+                for idx, ws in enumerate(workspaces, 1):
+                    current = " (current)" if ws['id'] == current_user.get('default_workspace_id') else ""
+                    print(f"{idx}. {ws['name']}{current}")
+                
+                try:
+                    ws_choice = int(input("\nSelect workspace number: "))
+                    if 1 <= ws_choice <= len(workspaces):
+                        update_data['default_workspace_id'] = workspaces[ws_choice - 1]['id']
+                    else:
+                        print("✗ Invalid selection")
+                        return
+                except ValueError:
+                    print("✗ Please enter a valid number")
+                    return
+        
+        elif choice == '0':
+            return
+        
+        else:
+            print("✗ Invalid option")
+            return
+        
+        if not update_data:
+            print("ℹ No changes made")
+            return
+        
+        # Update profile
+        result = self.api_request('PUT', '/me', update_data)
+        
+        if result:
+            print("✓ Profile updated successfully")
+            self.log(f"(Update Profile): {', '.join(update_data.keys())}")
+            # Update cached user data
+            self.user_data = result
+        else:
+            print("✗ Failed to update profile")
+
+    def view_organizations(self):
+        """View organizations user is part of"""
+        if not self.api_token:
+            print("✗ Please login first")
+            return
+
+        # Check if we have cached organizations
+        if self.cached_organizations:
+            print("\n⚡ Using cached organizations data...")
+            orgs = self.cached_organizations
+        else:
+            print("\n⏳ Fetching organizations...")
+            orgs = self.api_request('GET', '/me/organizations')
+            
+            if orgs:
+                # Cache the organizations
+                self.cached_organizations = orgs
+                self.save_config(silent=True)
+                print("✓ Organizations cached for future use")
+        
+        if not orgs:
+            print("ℹ You are not part of any organizations")
+            return
+
+        # Check if we have cached workspaces
+        if self.cached_workspaces:
+            print("⚡ Using cached workspaces data...")
+            workspaces = self.cached_workspaces
+        else:
+            print("⏳ Fetching workspaces...")
+            workspaces = self.api_request('GET', '/me/workspaces')
+            
+            if workspaces:
+                # Cache the workspaces
+                self.cached_workspaces = workspaces
+                self.save_config(silent=True)
+                print("✓ Workspaces cached for future use")
+        
+        # Count workspaces per organization
+        org_workspace_count = {}
+        if workspaces:
+            for ws in workspaces:
+                org_id = ws.get('organization_id')
+                if org_id:
+                    org_workspace_count[org_id] = org_workspace_count.get(org_id, 0) + 1
+
+        print("\n=== YOUR ORGANIZATIONS ===")
+        for idx, org in enumerate(orgs, 1):
+            admin = " (Admin)" if org.get('admin', False) else ""
+            owner = " (Owner)" if org.get('owner', False) else ""
+            org_id = org.get('id')
+            
+            print(f"{idx}. {org.get('name', 'Unknown')}{admin}{owner}")
+            print(f"   ID: {org_id}")
+            
+            # Use counted workspaces or try API fields
+            workspace_count = org_workspace_count.get(org_id)
+            if workspace_count is None:
+                workspace_count = (org.get('workspace_count') or 
+                                 org.get('workspaces_count') or 
+                                 org.get('workspaces') or
+                                 len(org.get('workspace_ids', [])) if org.get('workspace_ids') else None)
+            
+            if workspace_count is not None:
+                print(f"   Workspaces: {workspace_count}")
+            
+            # Show pricing plan if available
+            if org.get('pricing_plan_id'):
+                print(f"   Plan ID: {org.get('pricing_plan_id')}")
+            
+            print()
+        
+        print(f"✓ Total organizations: {len(orgs)}")
+        self.log(f"(List): {len(orgs)} organizations")
+        print("💡 Tip: Use option 7 in Settings to refresh cache")
+
+    def refresh_cache(self):
+        """Refresh cached data"""
+        print("\n" + "="*60)
+        print("                   🔄 REFRESH CACHE")
+        print("="*60)
+        print("Current cache status:")
+        print(f"  Organizations: {'✓ Cached' if self.cached_organizations else '✗ Empty'}")
+        print(f"  Clients: {'✓ Cached' if self.cached_clients else '✗ Empty'}")
+        print(f"  Tasks: {'✓ Cached' if self.cached_tasks else '✗ Empty'}")
+        print(f"  Workspaces: {'✓ Cached' if self.cached_workspaces else '✗ Empty'}")
+        print(f"  Projects: {'✓ Cached' if self.cached_projects else '✗ Empty'}")
+        print(f"  Tags: {'✓ Cached' if self.cached_tags else '✗ Empty'}")
+        
+        print("\n" + "="*60)
+        print("                   🔄 REFRESH CACHE")
+        print("="*60)
+        print("  1. Refresh All Cache       [6🔄]")
+        print("  2. Refresh Organizations   [1🔄]")
+        print("  3. Refresh Clients         [1🔄]")
+        print("  4. Refresh Tasks           [1🔄]")
+        print("  5. Refresh Workspaces      [1🔄]")
+        print("  6. Refresh Projects        [1🔄]")
+        print("  7. Refresh Tags            [1🔄]")
+        print("  8. Clear All Cache         [0⚡]")
+        print("  0. Cancel")
+        print("\n  Legend: 🔄 Refresh (API calls)  ⚡ No calls")
+        print("="*60)
+        
+        choice = input("\nSelect option: ").strip()
+        
+        if choice == '1':
+            # Refresh all
+            print("\n⏳ Refreshing all cached data...")
+            self.cached_organizations = []
+            self.cached_clients = []
+            self.cached_tasks = []
+            self.cached_workspaces = []
+            self.cached_projects = []
+            self.cached_tags = []
+            
+            # Fetch fresh data
+            orgs = self.api_request('GET', '/me/organizations')
+            if orgs:
+                self.cached_organizations = orgs
+            
+            clients = self.api_request('GET', '/me/clients')
+            if clients:
+                self.cached_clients = clients
+            
+            tasks = self.api_request('GET', '/me/tasks')
+            if tasks:
+                self.cached_tasks = tasks
+            
+            workspaces = self.api_request('GET', '/me/workspaces')
+            if workspaces:
+                self.cached_workspaces = workspaces
+            
+            projects = self.api_request('GET', '/me/projects')
+            if projects:
+                self.cached_projects = projects
+            
+            tags = self.api_request('GET', '/me/tags')
+            if tags:
+                self.cached_tags = tags
+            
+            self.save_config(silent=True)
+            print("✓ All cache refreshed successfully")
+            self.log("(Refresh): All cache")
+            
+        elif choice == '2':
+            print("\n⏳ Refreshing organizations...")
+            self.cached_organizations = []
+            orgs = self.api_request('GET', '/me/organizations')
+            if orgs:
+                self.cached_organizations = orgs
+                self.save_config(silent=True)
+                print("✓ Organizations cache refreshed")
+                self.log("(Refresh): Organizations cache")
+            
+        elif choice == '3':
+            print("\n⏳ Refreshing clients...")
+            self.cached_clients = []
+            clients = self.api_request('GET', '/me/clients')
+            if clients:
+                self.cached_clients = clients
+                self.save_config(silent=True)
+                print("✓ Clients cache refreshed")
+                self.log("(Refresh): Clients cache")
+            
+        elif choice == '4':
+            print("\n⏳ Refreshing tasks...")
+            self.cached_tasks = []
+            tasks = self.api_request('GET', '/me/tasks')
+            if tasks:
+                self.cached_tasks = tasks
+                self.save_config(silent=True)
+                print("✓ Tasks cache refreshed")
+                self.log("(Refresh): Tasks cache")
+            
+        elif choice == '5':
+            print("\n⏳ Refreshing workspaces...")
+            self.cached_workspaces = []
+            workspaces = self.api_request('GET', '/me/workspaces')
+            if workspaces:
+                self.cached_workspaces = workspaces
+                self.save_config(silent=True)
+                print("✓ Workspaces cache refreshed")
+                self.log("(Refresh): Workspaces cache")
+            
+        elif choice == '6':
+            print("\n⏳ Refreshing projects...")
+            self.cached_projects = []
+            projects = self.api_request('GET', '/me/projects')
+            if projects:
+                self.cached_projects = projects
+                self.save_config(silent=True)
+                print("✓ Projects cache refreshed")
+                self.log("(Refresh): Projects cache")
+            
+        elif choice == '7':
+            print("\n⏳ Refreshing tags...")
+            self.cached_tags = []
+            tags = self.api_request('GET', '/me/tags')
+            if tags:
+                self.cached_tags = tags
+                self.save_config(silent=True)
+                print("✓ Tags cache refreshed")
+                self.log("(Refresh): Tags cache")
+            
+        elif choice == '8':
+            # Clear all cache without refetching
+            confirm = input("\n⚠️  Clear all cache? This will not refetch data. (yes/no): ").strip().lower()
+            if confirm == 'yes':
+                self.cached_organizations = []
+                self.cached_clients = []
+                self.cached_tasks = []
+                self.cached_workspaces = []
+                self.cached_projects = []
+                self.cached_tags = []
+                self.save_config(silent=True)
+                print("✓ All cache cleared")
+                self.log("(Clear): All cache")
+            else:
+                print("✗ Cancelled")
+        
+        elif choice == '0':
+            return
+        
+        else:
+            print("✗ Invalid option")
+
+    def toggl_settings_menu(self):
+        """Display and handle Toggl Settings submenu"""
+        while True:
+            print("\n" + "="*60)
+            print("                   ⚙️  TOGGL SETTINGS")
+            print("="*60)
+            print("  1. View Organizations  [2📡 0⚡]")
+            print("  2. View Clients        [1📡 0⚡]")
+            print("  3. View Tasks          [1📡 0⚡]")
+            print("  4. List Projects       [1📡+ 0⚡]")
+            print("  5. Update User Profile [2-3📡]")
+            print("  6. Check API Quota     [2📡 1⚡]")
+            print("  7. Refresh Cache       [🔄 see submenu]")
+            print("  0. Back to Main Menu")
+            print("\n  Legend: 📡 API calls  ⚡ Cached  🔄 Refresh")
+            print("="*60)
+            
+            choice = input("\nSelect option: ").strip()
+            
+            if choice == '1':
+                self.view_organizations()
+            elif choice == '2':
+                self.list_clients()
+            elif choice == '3':
+                self.list_tasks()
+            elif choice == '4':
+                self.list_projects_paginated()
+            elif choice == '5':
+                self.update_user_profile()
+            elif choice == '6':
+                self.check_api_quota()
+            elif choice == '7':
+                self.refresh_cache()
+            elif choice == '0':
+                break
+            else:
+                print("✗ Invalid option. Please try again.")
+
     def open_reports(self):
         """Open Toggl Reports in default browser"""
         reports_url = "https://track.toggl.com/reports/"
@@ -1076,20 +1687,20 @@ class TogglCLI:
     def show_menu(self):
         """Display main menu"""
         print("\n" + "="*60)
-        print("⏱  TOGGL TIME TRACKER")
+        print("                   ⏱  TOGGL TIME TRACKER")
         print("="*60)
         print("  ⚡ ACTIONS                 │  📊 REPORTS & MANAGEMENT")
         print("─"*29 + "┼" + "─"*30)
-        print("  1. Login / Setup           │     6. Today's Entries")
-        print("  2. Start Timer             │     7. Weekly Summary")
-        print("  3. Stop Timer              │     8. Search Entries")
-        print("  4. Resume Last Timer       │     9. Edit Entry")
-        print("  5. Current Timer           │    10. Delete Entry")
-        print("                             │    11. List Projects")
-        print("  📁 CREATE                  │    12. List Tags")
+        print("  1. 🛠  Login / Setup        │     6. 📅 Today's Entries")
+        print("  2. ▶  Start Timer          │     7. 📅 Weekly Summary")
+        print("  3. ⏹  Stop Timer           │     8. 📅 Search Entries")
+        print("  4. ⏯  Resume Last Timer    │     9. 📅 Edit Entry")
+        print("  5. ⏱  Current Timer        │    10. 📅 Delete Entry")
+        print("                             │    11. 📅 List Projects")
+        print("  📁 CREATE | 0. Exit        │    12. 📅 List Tags")
         print("─"*29 + "┼" + "─"*30)
-        print(" 13. Create Project          │  O. Open Reports (Web)")
-        print(" 14. Create Tag              │  0. Exit")
+        print("  13. 📝 Create Project      │     O. 🌐 Open Reports (Web)")
+        print("  14. 📝 Create Tag          │     S. ⚙️ Toggl Settings")
         print("="*60)
 
     def run(self):
@@ -1129,6 +1740,8 @@ class TogglCLI:
                     self.create_tag()
                 elif choice.lower() == 'o':
                     self.open_reports()
+                elif choice.lower() == 's':
+                    self.toggl_settings_menu()
                 elif choice == '0':
                     print("\n👋 Goodbye!")
                     break
