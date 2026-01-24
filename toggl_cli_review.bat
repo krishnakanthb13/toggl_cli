@@ -38,21 +38,21 @@ REM Detect and run server
 where http-server >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
     echo [OK] Using http-server (Node.js)
-    call http-server -p 8086 -c-1
+    call http-server -a 127.0.0.1 -p 8086 -c-1
     goto SERVER_DONE
 )
 
 where python >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
     echo [OK] Using Python server
-    python -m http.server 8086
+    python -m http.server 8086 --bind 127.0.0.1
     goto SERVER_DONE
 )
 
 where python3 >nul 2>nul
 if %ERRORLEVEL% EQU 0 (
     echo [OK] Using Python3 server
-    python3 -m http.server 8086
+    python3 -m http.server 8086 --bind 127.0.0.1
     goto SERVER_DONE
 )
 
