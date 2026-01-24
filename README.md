@@ -2,7 +2,7 @@
 
 > **Track time without leaving your terminal.** A keyboard-first CLI for developers who live in the command line.
 
-![screenshot](screenshot.png)
+![screenshot](/assets/screenshot_2.1.png)
 
 [![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
@@ -34,9 +34,13 @@
 - ✅ Weekly summary with breakdowns
 - ✅ Search entries by multiple criteria
 - ✅ Billable time tracking
+- ✅ **New Settings Menu** - Manage organizations, clients, and tasks
+- ✅ **Smart Caching** - 70% reduction in API calls for snappier experience
+- ✅ **API Quota Monitoring** - Keep track of your rate limits
 - ✅ **On-the-fly creation** - Press P/T to create projects/tags while starting timer
-- ✅ Auto-logging to `toggl_cli_logs.txt`
-- ✅ **New:** AI-Powered Web Reviewer to analyze your logs
+- ✅ **Auto-logging** to `toggl_cli_logs.txt`
+- ✅ **AI-Powered Web Reviewer** to analyze your logs
+- ✅ **New:** Icons and symbols for a modern terminal look
 - ✅ Simple number-based menu (no typing long commands!)
 
 ---
@@ -104,6 +108,10 @@ The Toggl CLI consists of the following files:
 | `README.md` | User guide (this file) |
 | `CODE_DOCUMENTATION.md` | Technical documentation |
 | `DESIGN_PHILOSOPHY.md` | Project rationale |
+| `Reference/CACHE_USAGE_GUIDE.md` | Caching & Refresh guide |
+| `Reference/API_CACHING_SUMMARY.md` | API performance analysis |
+| `Reference/SETTINGS_QUICK_REFERENCE.md` | Settings menu guide |
+| `Reference/FEATURE_IMPLEMENTATION_SUMMARY.md` | Detailed feature list |
 | `CONTRIBUTING.md` | Contribution guidelines |
 | `RELEASE_NOTES.md` | Version history |
 
@@ -198,16 +206,16 @@ Total today: 1h 15m
 ============================================================
   ⚡ ACTIONS                 │  📊 REPORTS & MANAGEMENT
 ─────────────────────────────┼──────────────────────────────
-  1. Login / Setup           │     6. Today's Entries
-  2. Start Timer             │     7. Weekly Summary
-  3. Stop Timer              │     8. Search Entries
-  4. Resume Last Timer       │     9. Edit Entry
-  5. Current Timer           │    10. Delete Entry
-                             │    11. List Projects
-  📁 CREATE                  │    12. List Tags
+  1. 🛠  Login / Setup        │     6. 📅 Today's Entries
+  2. ▶  Start Timer          │     7. 📅 Weekly Summary
+  3. ⏹  Stop Timer           │     8. 📅 Search Entries
+  4. ⏯  Resume Last Timer    │     9. 📅 Edit Entry
+  5. ⏱  Current Timer        │    10. 📅 Delete Entry
+                             │    11. 📅 List Projects
+  📁 CREATE | 0. Exit        │    12. 📅 List Tags
 ─────────────────────────────┼──────────────────────────────
- 13. Create Project          │  O. Open Reports (Web)
- 14. Create Tag              │  0. Exit
+ 13. 📝 Create Project       │  O. 🌐 Open Reports (Web)
+ 14. 📝 Create Tag           │  S. ⚙️ Toggl Settings
 ============================================================
 ```
 
@@ -695,6 +703,50 @@ Tag name: client-call
 
 ---
 
+### S. Toggl Settings
+
+**When to use:** Managing your account, checking limits, or manual caching
+
+**Menu Options:**
+1. **View Organizations** [2📡 0⚡] - View all orgs and workspace counts
+2. **View Clients** [1📡 0⚡] - View all clients in workspace
+3. **View Tasks** [1📡 0⚡] - View all tasks grouped by project
+4. **List Projects (Paginated)** [1📡+ 0⚡] - Handles large project lists
+5. **Update User Profile** [2-3📡] - Update email, name, timezone, etc.
+6. **Check API Quota** [2📡 1⚡] - View real-time API rate limits
+7. **Refresh Cache** [🔄] - Manually update cached data
+
+**Legend:**
+- 📡 **API calls** - Requires internet connection
+- ⚡ **Cached** - Instant, no API calls used
+- 🔄 **Refresh** - Submenu for granular cache control
+
+**Tips:**
+- Use **Refresh Cache** after making changes in the web interface
+- Check **API Quota** if you experience connection errors
+- Caching makes the interface significantly faster!
+
+---
+
+## ⚡ Caching & API Limits
+
+The Toggl CLI now includes a high-performance caching system to save API quota and provide a snappier experience.
+
+### How it works:
+- **First-time use:** Fetches data from Toggl and stores it in `toggl_config.json`.
+- **Subsequent use:** Loads data instantly from the local cache.
+- **Manual Refresh:** Use option `S -> 7` to refresh specific or all data.
+
+### Quota Safety:
+Option `S -> 6` gives you a real-time view of your API usage, including:
+- Used vs Total requests
+- Time until next reset
+- Warning if you have < 5 requests remaining
+
+Refer to [CACHE_USAGE_GUIDE.md](Reference/CACHE_USAGE_GUIDE.md) for detailed management.
+
+---
+
 ## 📄 Log File
 
 All actions are logged to `toggl_cli_logs.txt` in the same folder as the script.
@@ -1010,5 +1062,6 @@ Start tracking your time like a pro. Remember:
 - **Press 3** to stop  
 - **Press 4** to resume
 - **Press 7** for weekly insights
+- **Press S** for advanced settings & caching
 
 Happy time tracking! ⏱️

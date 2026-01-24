@@ -1,5 +1,25 @@
 # Release Notes
 
+## v1.1.2 - Settings & Performance Update (January 2026)
+
+### ⚙️ Enhanced Toggl Settings
+Manage your account with a dedicated settings menu (Option `S`).
+- **Organization Management**: View all organizations and workspace counts.
+- **Client & Task Support**: Deep dive into your data without leaving the CLI.
+- **UserProfile Updates**: Real-time updates for your email, name, and regional settings.
+
+### ⚡ Smart Caching 2.0
+Significant performance boost through persistent local storage.
+- **70% API Reduction**: Minimizes network latency and preserves your Toggl rate limits.
+- **Granular Refresh**: Manually refresh specific data points (clients, tasks, tags) via the submenu.
+- **Subtle UI Symbols**: Visual indicators (📡, ⚡, 🔄) keep you informed about data origin.
+
+### 📊 Quota & Safety
+- **Real-Time Monitoring**: New `Check API Quota` feature shows your exact rate limit status.
+- **Critical Alerts**: Automatic warnings when your remaining API quota drops below 5.
+
+---
+
 ## v1.1.0 - AI Reviewer Update (January 2026)
 
 ### 🤖 AI-Powered Log Reviewer

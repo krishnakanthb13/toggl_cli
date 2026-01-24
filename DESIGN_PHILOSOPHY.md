@@ -31,17 +31,19 @@ A **keyboard-first, menu-driven CLI** that:
 ### 1. Simplicity Over Complexity
 - Number-based menu (press `2` to start, `3` to stop)
 - No flags, no arguments, no learning curve
-- Progressive disclosure (simple first, details when needed)
+- **Progressive disclosure**: Core features are front-and-center; advanced "Settings" are tucked into a dedicated menu (`S`) for power users.
 
-### 2. Speed Over Polish
+### 2. Speed & Efficiency
 - Resume last timer in one keystroke (`4`)
 - Skip projects/tags with a quick `n`
-- Minimal prompts, maximum efficiency
+- **Smart Caching**: 70% reduction in API latency by caching projects, tags, orgs, and clients locally.
+- Minimal prompts, maximum productivity.
 
-### 3. Safety Over Risk
+### 3. Safety & Performance
 - All actions logged to `toggl_cli_logs.txt`
 - Deletion requires typing "yes" (not just "y")
 - Config saved locally (token never transmitted insecurely)
+- **Quota Awareness**: Real-time monitoring of API limits to prevent account throttling.
 
 ### 4. Integration Over Isolation
 - Full sync with Toggl web/mobile apps
@@ -93,9 +95,9 @@ To keep the tool focused, these features were intentionally excluded:
 |---------|--------|
 | GUI interface | Defeats keyboard-first purpose |
 | Automatic time detection | Privacy/complexity concerns |
-| Multiple workspace switching | Use web app for admin tasks |
-| Detailed reporting | Use Toggl Reports (Option O) |
-| Team management | Enterprise feature, use web |
+| Enterprise automation | Too complex for a lightweight CLI |
+| Advanced Visualizations | Use AI Reviewer (HTML) or Web Reports (Option O) |
+| Detailed Team management | Use official Toggl web interface |
 
 ---
 
@@ -113,12 +115,13 @@ To keep the tool focused, these features were intentionally excluded:
 
 ## 📈 Future Possibilities
 
-Potential enhancements (not currently planned):
-- [ ] Keyboard shortcuts for common projects
-- [ ] Timer notifications/reminders
+Potential enhancements:
+- [ ] Keyboard shortcuts for common projects (e.g., press `F1` for `Project A`)
+- [ ] Timer notifications/reminders (desktop alerts)
 - [ ] Offline mode with sync queue
-- [ ] Integration with other tools (Git hooks, etc.)
-- [ ] Custom report generation
+- [ ] Integration with other tools (Git commit hooks, CI/CD signals)
+- [ ] Task selection integration (assign tasks to time entries)
+- [ ] Custom CLI report generator (lightweight daily stats)
 
 ---
 
@@ -129,17 +132,21 @@ Potential enhancements (not currently planned):
 | File | Type | Purpose |
 |------|------|---------|
 | `toggl_cli.bat` | Entry Point | Windows launcher that invokes Python to run the CLI |
-| `toggl_cli.py` | Core Application | Main Python script (1000+ lines) with all functionality |
-| `toggl_config.json` | Runtime Config | Auto-created; stores API token, workspace ID, and cached data |
+| `toggl_cli.py` | Core Application | Main Python script containing the `TogglCLI` class |
+| `toggl_config.json` | Runtime Config | Stores API token, workspace ID, and all cached entities |
 | `toggl_cli_logs.txt` | Activity Log | Auto-created; timestamped log of all CLI actions |
 
 ### Documentation Files
 
 | File | Purpose |
 |------|---------|
-| `toggl_readme.md` | User guide - comprehensive how-to documentation |
-| `toggl_context_readme.md` | Design philosophy, target users, and project rationale (this file) |
-| `toggl_code_readme.md` | Technical documentation - architecture, API, methods |
+| `README.md` | User guide - comprehensive how-to documentation |
+| `DESIGN_PHILOSOPHY.md` | Project rationale, target users, and ideology (this file) |
+| `CODE_DOCUMENTATION.md` | Technical documentation - architecture, API, implementation |
+| `Reference/CACHE_USAGE_GUIDE.md` | Detailed guide on caching behavior and manual refreshes |
+| `Reference/API_CACHING_SUMMARY.md` | Performance analysis showing API call reductions |
+| `Reference/SETTINGS_QUICK_REFERENCE.md` | Practical guide for the Toggl Settings submenu |
+| `Reference/FEATURE_IMPLEMENTATION_SUMMARY.md` | Complete inventory of implemented Toggl features |
 
 ### Quick Execution Flow
 
@@ -151,4 +158,5 @@ toggl_cli.bat → python toggl_cli.py
                       └── Calls: Toggl API (https://api.track.toggl.com/api/v9)
 ```
 
-**Total Files: 7** (1 batch, 1 Python, 2 runtime data, 3 documentation)
+**Total Documentation Files: 7**
+**Total Project Files: 11** (1 batch, 1 Python, 2 runtime data, 7 documentation)

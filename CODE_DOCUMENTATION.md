@@ -4,13 +4,18 @@
 
 ```
 toggl_cli/
-├── toggl_cli.bat          # Windows launcher - entry point
-├── toggl_cli.py           # Main Python application (1000+ lines)
-├── toggl_config.json      # Created at runtime (API token, workspace, cache)
-├── toggl_cli_logs.txt           # Created at runtime (activity log)
-├── toggl_readme.md        # User guide (how to use)
-├── toggl_context_readme.md # Project context (why & what)
-└── toggl_code_readme.md   # This file (code documentation)
+├── toggl_cli.bat              # Windows launcher - entry point
+├── toggl_cli.py               # Main Python application (1700+ lines)
+├── toggl_config.json          # Created at runtime (API token, workspace, cache)
+├── README.md                  # Main User Guide
+├── DESIGN_PHILOSOPHY.md       # Project rationale
+├── CODE_DOCUMENTATION.md      # This file (technical documentation)
+├── Reference/
+│   ├── CACHE_USAGE_GUIDE.md        # Caching & Refresh guide
+│   ├── API_CACHING_SUMMARY.md      # API performance analysis
+│   ├── SETTINGS_QUICK_REFERENCE.md # Settings menu guide
+│   └── FEATURE_IMPLEMENTATION_SUMMARY.md # Detailed feature list
+└── toggl_cli_logs.txt         # Created at runtime (activity log)
 ```
 
 ### File Dependency Map
@@ -21,9 +26,9 @@ toggl_cli/
 | **`toggl_cli.py`** | Core Application | Main Python script containing the `TogglCLI` class with all functionality |
 | **`toggl_config.json`** | Runtime Config | Stores API token, workspace ID, cached projects, and cached tags |
 | **`toggl_cli_logs.txt`** | Activity Log | Timestamped log of all CLI actions (logins, starts, stops, edits, etc.) |
-| **`toggl_readme.md`** | Documentation | User guide - comprehensive how-to documentation |
-| **`toggl_context_readme.md`** | Documentation | Design philosophy, target users, and project rationale |
-| **`toggl_code_readme.md`** | Documentation | Technical documentation - architecture, API, methods |
+| **`README.md`** | Documentation | Main User guide - comprehensive how-to documentation |
+| **`DESIGN_PHILOSOPHY.md`** | Documentation | Design philosophy, target users, and project rationale |
+| **`CODE_DOCUMENTATION.md`** | Documentation | Technical documentation - architecture, API, methods |
 
 ### Key Constants
 
@@ -93,8 +98,12 @@ class TogglCLI:
     api_token: str          # Toggl API authentication token
     workspace_id: int       # Active workspace ID
     user_data: dict         # User profile data from Toggl
-    cached_projects: list   # Cached projects (reduces API calls)
-    cached_tags: list       # Cached tags (reduces API calls)
+    cached_projects: list       # Cached projects (reduces API calls)
+    cached_tags: list           # Cached tags (reduces API calls)
+    cached_organizations: list   # NEW: Cached organizations
+    cached_clients: list        # NEW: Cached clients
+    cached_tasks: list          # NEW: Cached tasks
+    cached_workspaces: list     # NEW: Cached workspaces
     
     # Core Methods (see below)
 ```
@@ -148,7 +157,15 @@ class TogglCLI:
 | `delete_entry()` | Remove time entry with confirmation |
 | `create_project()` | Add new project to workspace (menu option 13) |
 | `create_tag()` | Add new tag to workspace (menu option 14) |
-| `_quick_create_project()` | On-the-fly project creation during timer start (returns ID) |
+| `view_organizations()` | List orgs and workspace counts (uses cache) |
+| `list_clients()` | List all clients in workspace (uses cache) |
+| `list_tasks()` | List tasks grouped by project (uses cache) |
+| `list_projects_paginated()` | Fetch projects with pagination support |
+| `update_user_profile()` | Update user profile data via PUT /me |
+| `check_api_quota()` | View API rate limit status |
+| `refresh_cache()` | Comprehensive cache management submenu |
+| `toggl_settings_menu()` | Entry point for Toggl Settings (Option S) |
+| `_quick_create_project()` | On-the-fly project creation during timer start |
 | `_quick_create_tag()` | On-the-fly tag creation during timer start (returns ID) |
 
 ### Utilities
@@ -181,6 +198,12 @@ class TogglCLI:
 | `/workspaces/{id}/time_entries/{id}/stop` | PATCH | Stop running timer |
 | `/workspaces/{id}/projects` | POST | Create new project |
 | `/workspaces/{id}/tags` | POST | Create new tag |
+| `/me/quota` | GET | Check API rate limit status |
+| `/me/clients` | GET | List all clients |
+| `/me/tasks` | GET | List all tasks |
+| `/me/projects/paginated` | GET | List projects with pagination |
+| `/me` | PUT | Update user profile |
+| `/me/organizations` | GET | List organizations |
 
 ### Authentication
 
@@ -266,7 +289,11 @@ Cached data is stored in `toggl_config.json`:
   "api_token": "your-token",
   "workspace_id": 12345,
   "cached_projects": [...],
-  "cached_tags": [...]
+  "cached_tags": [...],
+  "cached_organizations": [...],
+  "cached_clients": [...],
+  "cached_tasks": [...],
+  "cached_workspaces": [...]
 }
 ```
 
@@ -275,14 +302,15 @@ Cached data is stored in `toggl_config.json`:
 | Action | What Happens |
 |--------|-------------|
 | **Login (Option 1)** | Fetches and caches projects + tags |
+| **Start Timer (Option 2)** | Uses cache (no API call for projects/tags) |
+| **Search (Option 8)** | Uses cache (no API call for projects/tags) |
+| **Edit Entry (Option 9)** | Uses cache (no API call for projects/tags) |
 | **List Projects (Option 11)** | Fresh API call, updates cache |
 | **List Tags (Option 12)** | Fresh API call, updates cache |
 | **Create Project (Option 13)** | Creates + refreshes projects cache |
 | **Create Tag (Option 14)** | Creates + refreshes tags cache |
-| **Start Timer (Option 2)** | Uses cache (no API call for projects/tags) |
-| **Edit Entry (Option 9)** | Uses cache (no API call for projects/tags) |
-| **Search (Option 8)** | Uses cache (no API call for projects/tags) |
-
+| **Toggl Settings (Option S)** | Uses cache for viewing; provides manual refresh (Option 7) |
+| **Check API Quota (S -> 6)** | Fresh API call for quota, updates/uses cached org names |
 ---
 
 ## ⏰ Timezone Handling
@@ -346,16 +374,16 @@ This ensures:
 ============================================================
   ⚡ ACTIONS                 │  📊 REPORTS & MANAGEMENT
 ─────────────────────────────┼──────────────────────────────
-  1. Login / Setup           │     6. Today's Entries
-  2. Start Timer             │     7. Weekly Summary
-  3. Stop Timer              │     8. Search Entries
-  4. Resume Last Timer       │     9. Edit Entry
-  5. Current Timer           │    10. Delete Entry
-                             │    11. List Projects
-  📁 CREATE                  │    12. List Tags
+  1. 🛠  Login / Setup        │     6. 📅 Today's Entries
+  2. ▶  Start Timer          │     7. 📅 Weekly Summary
+  3. ⏹  Stop Timer           │     8. 📅 Search Entries
+  4. ⏯  Resume Last Timer    │     9. 📅 Edit Entry
+  5. ⏱  Current Timer        │    10. 📅 Delete Entry
+                             │    11. 📅 List Projects
+  📁 CREATE | 0. Exit        │    12. 📅 List Tags
 ─────────────────────────────┼──────────────────────────────
- 13. Create Project          │  O. Open Reports (Web)
- 14. Create Tag              │  0. Exit
+ 13. 📝 Create Project       │  O. 🌐 Open Reports (Web)
+ 14. 📝 Create Tag           │  S. ⚙️ Toggl Settings
 ============================================================
 ```
 
@@ -447,7 +475,7 @@ __pycache__/
 
 | File | Purpose |
 |------|---------|
-| `toggl_readme.md` | User guide - how to use |
-| `toggl_context_readme.md` | Project context - why & what |
+| `README.md` | User guide - how to use |
+| `DESIGN_PHILOSOPHY.md` | Project context - why & what |
 | `toggl_cli.py` | Main Python application |
 | `toggl_cli.bat` | Windows launcher script |
