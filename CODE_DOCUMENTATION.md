@@ -194,7 +194,8 @@ class TogglCLI:
 | `show_menu()` | Render the two-column categorized menu with aliases |
 | `open_reports()` | Launch Toggl Reports in default browser |
 | `run()` | Main application loop with alias resolution |
-| `_fuzzy_select()` | Select item by number or partial name match |
+| `_fuzzy_select()` | Select item by number or partial name match (reads input) |
+| `_fuzzy_select_with()` | Select item by number or partial name from pre-read choice |
 | `_get_recent_project_ids()` | Get today's recent project IDs (5-min cache) |
 
 ---

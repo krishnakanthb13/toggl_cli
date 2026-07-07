@@ -266,7 +266,7 @@ class TogglCLI:
                 if choice.lower() == 'p':
                     project_id, project_name = self._quick_create_project()
                 else:
-                    selected = self._fuzzy_select(projects, "")
+                    selected = self._fuzzy_select_with(projects, choice)
                     if selected:
                         project_id = selected['id']
                         project_name = selected['name']
@@ -304,21 +304,9 @@ class TogglCLI:
                             tag_ids.append(new_tag_id)
                             tags = self.cached_tags
                     else:
-                        # Try number first
-                        try:
-                            choice_num = int(item)
-                            if 1 <= choice_num <= len(tags):
-                                tag_ids.append(tags[choice_num - 1]['id'])
-                                continue
-                        except ValueError:
-                            pass
-                        # Fuzzy match by name
-                        choice_lower = item.lower()
-                        matches = [t for t in tags if choice_lower in t.get('name', '').lower()]
-                        if len(matches) == 1:
-                            tag_ids.append(matches[0]['id'])
-                        elif len(matches) > 1:
-                            print(f"  ⚠ Ambiguous tag '{item}' — {len(matches)} matches, skipping")
+                        selected = self._fuzzy_select_with(tags, item)
+                        if selected:
+                            tag_ids.append(selected['id'])
                 
                 if not tag_ids:
                     print("✗ No valid tags selected")
@@ -560,6 +548,30 @@ class TogglCLI:
     def _fuzzy_select(self, items, prompt_text="Select"):
         """Let user type a number OR partial name to select from a list."""
         choice = input(prompt_text).strip()
+        # Try as number first
+        try:
+            idx = int(choice)
+            if 1 <= idx <= len(items):
+                return items[idx - 1]
+            print(f"✗ Number out of range (1-{len(items)})")
+            return None
+        except ValueError:
+            pass
+        # Fuzzy match by name
+        choice_lower = choice.lower()
+        matches = [i for i in items if choice_lower in i.get('name', '').lower()]
+        if len(matches) == 1:
+            return matches[0]
+        elif len(matches) > 1:
+            print(f"✗ Ambiguous — {len(matches)} matches. Be more specific.")
+        else:
+            print(f"✗ No match for '{choice}'")
+        return None
+
+    def _fuzzy_select_with(self, items, choice):
+        """Select item by number or partial name from a pre-read choice string."""
+        if not choice:
+            return None
         # Try as number first
         try:
             idx = int(choice)
@@ -862,7 +874,7 @@ class TogglCLI:
                         if new_project_id:
                             update_data['project_id'] = new_project_id
                     else:
-                        selected = self._fuzzy_select(projects, "")
+                        selected = self._fuzzy_select_with(projects, proj_choice)
                         if selected:
                             update_data['project_id'] = selected['id']
                         else:
@@ -899,19 +911,9 @@ class TogglCLI:
                                     tag_ids.append(new_tag_id)
                                     tags = self.cached_tags
                             else:
-                                try:
-                                    choice_num = int(item)
-                                    if 1 <= choice_num <= len(tags):
-                                        tag_ids.append(tags[choice_num - 1]['id'])
-                                        continue
-                                except ValueError:
-                                    pass
-                                choice_lower = item.lower()
-                                matches = [t for t in tags if choice_lower in t.get('name', '').lower()]
-                                if len(matches) == 1:
-                                    tag_ids.append(matches[0]['id'])
-                                elif len(matches) > 1:
-                                    print(f"  ⚠ Ambiguous tag '{item}' — {len(matches)} matches, skipping")
+                                selected = self._fuzzy_select_with(tags, item)
+                                if selected:
+                                    tag_ids.append(selected['id'])
                         
                         if tag_ids:
                             update_data['tag_ids'] = tag_ids
@@ -1813,6 +1815,8 @@ class TogglCLI:
             try:
                 self.show_menu()
                 choice = input("\nSelect option: ").strip()
+                if not choice:
+                    continue
                 choice = self.ALIASES.get(choice.lower(), choice)
 
                 if choice == '1':

@@ -261,6 +261,7 @@ Total today: 1h 15m
 4. Choose tags (optional):
    - Press `y` to add tags
    - Enter numbers, names, or mix (e.g., `1,urgent,3`)
+   - Fuzzy search works for tags too (e.g., "deep" matches "deep-work")
    - Enter `T` to create a new tag
    - Press `n` to skip
 
@@ -284,7 +285,7 @@ Select project (number, name, or P): website
 
 **Tips:**
 - Use `st` alias instead of pressing `2`
-- Type partial project names (e.g., "web" matches "Client A - Website")
+- Type partial names for projects AND tags (e.g., "web", "urg", "deep")
 - Recent projects from today appear at the top
 - Use `P` and `T` to create items without leaving the timer flow
 
@@ -506,8 +507,8 @@ Total: 12h 30m
 2. Select entry from last 10 entries
 3. Choose what to edit:
    - `1` - Description
-   - `2` - Project (supports `P` to create new)
-   - `3` - Tags (supports `T` to create new)
+   - `2` - Project (fuzzy search + `P` to create new)
+   - `3` - Tags (fuzzy search + `T` to create new)
    - `4` - Billable status
 4. Make your change
 
