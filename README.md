@@ -34,14 +34,20 @@
 - ✅ Weekly summary with breakdowns
 - ✅ Search entries by multiple criteria
 - ✅ Billable time tracking
-- ✅ **New Settings Menu** - Manage organizations, clients, and tasks
+- ✅ **Fuzzy search** - Type partial names instead of numbers for projects/tags
+- ✅ **Recent projects** - Most-used projects shown at top of selection list
+- ✅ **CLI aliases** - Quick shortcuts: `st`=start, `sp`=stop, `rt`=resume, `ct`=current
 - ✅ **Smart Caching** - 70% reduction in API calls for snappier experience
+- ✅ **API Retry** - Automatic retry on transient network timeouts
+- ✅ **Settings Menu** - Manage organizations, clients, and tasks
 - ✅ **API Quota Monitoring** - Keep track of your rate limits
 - ✅ **On-the-fly creation** - Press P/T to create projects/tags while starting timer
+- ✅ **Duplicate prevention** - Case-insensitive check prevents duplicate projects/tags
+- ✅ **Atomic config writes** - Crash-safe configuration saves
 - ✅ **Auto-logging** to `toggl_cli_logs.txt`
-- ✅ **AI-Powered Web Reviewer** to analyze your logs
-- ✅ **New:** Icons and symbols for a modern terminal look
-- ✅ Simple number-based menu (no typing long commands!)
+- ✅ **AI-Powered Web Reviewer** with Clear Cache button
+- ✅ Icons and symbols for a modern terminal look
+- ✅ Simple number-based menu with keyboard shortcuts
 
 ---
 
@@ -207,10 +213,10 @@ Total today: 1h 15m
   ⚡ ACTIONS                 │  📊 REPORTS & MANAGEMENT
 ─────────────────────────────┼──────────────────────────────
   1. 🛠  Login / Setup        │     6. 📅 Today's Entries
-  2. ▶  Start Timer          │     7. 📅 Weekly Summary
-  3. ⏹  Stop Timer           │     8. 📅 Search Entries
-  4. ⏯  Resume Last Timer    │     9. 📅 Edit Entry
-  5. ⏱  Current Timer        │    10. 📅 Delete Entry
+  2. ▶  Start Timer  (st)    │     7. 📅 Weekly Summary (ws)
+  3. ⏹  Stop Timer   (sp)    │     8. 📅 Search Entries (se)
+  4. ⏯  Resume Timer (rt)    │     9. 📅 Edit Entry
+  5. ⏱  Current Timer(ct)    │    10. 📅 Delete Entry
                              │    11. 📅 List Projects
   📁 CREATE | 0. Exit        │    12. 📅 List Tags
 ─────────────────────────────┼──────────────────────────────
@@ -244,17 +250,18 @@ Total today: 1h 15m
 **When to use:** Beginning any task
 
 **Steps:**
-1. Press `2`
+1. Press `2` (or type `st`)
 2. Enter task description (e.g., "Client meeting")
 3. Choose project (optional):
    - Press `y` to select from list
-   - Enter a number to select existing project
+   - Enter a number, or type a partial name (fuzzy search)
+   - Recent projects appear at top of list
    - Enter `P` to create a new project on-the-fly
    - Press `n` to skip
 4. Choose tags (optional):
    - Press `y` to add tags
-   - Enter numbers separated by commas (e.g., `1,3,5`)
-   - Enter `T` to create a new tag (can mix with numbers: `1,T,3`)
+   - Enter numbers, names, or mix (e.g., `1,urgent,3`)
+   - Enter `T` to create a new tag
    - Press `n` to skip
 
 **Example Session:**
@@ -263,33 +270,22 @@ Total today: 1h 15m
 Enter task description: Writing project proposal
 Track to a project? (y/n): y
 
-=== YOUR PROJECTS ===
+=== RECENT PROJECTS ===
+1. Client A - Website [✓]
+
+=== ALL PROJECTS ===
 1. Client A - Website [✓]
 2. Client B - App [✓]
 P. Create New Project
 
-Select project (number or P): P
-New project name: Client C - Redesign
-✓ Project created: Client C - Redesign
-
-Add tags? (y/n): y
-
-=== YOUR TAGS ===
-1. urgent
-2. meeting
-3. development
-T. Create New Tag
-
-Enter tags (numbers, T for new, comma-separated): 1,T,3
-New tag name: documentation
-✓ Tag created: documentation
-✓ Timer started: Writing project proposal → Client C - Redesign [tags: 3]
+Select project (number, name, or P): website
+✓ Timer started: Writing project proposal → Client A - Website
 ```
 
 **Tips:**
-- Use clear, searchable descriptions
-- Projects help organize work by client/category
-- Tags add extra categorization (urgent, meeting, etc.)
+- Use `st` alias instead of pressing `2`
+- Type partial project names (e.g., "web" matches "Client A - Website")
+- Recent projects from today appear at the top
 - Use `P` and `T` to create items without leaving the timer flow
 
 ---
@@ -805,21 +801,25 @@ All actions are logged to `toggl_cli_logs.txt` in the same folder as the script.
 
 ### Keyboard Shortcuts
 
-While the CLI doesn't have traditional shortcuts, you can speed up your workflow:
+The CLI supports built-in aliases for power users:
 
-1. **Keep it running in a terminal window**
-   - Pin to taskbar (Windows)
-   - Keep in dock (Mac)
+| Alias | Action |
+|-------|--------|
+| `st` | Start Timer |
+| `sp` | Stop Timer |
+| `rt` | Resume Timer |
+| `ct` | Current Timer |
+| `te` | Today's Entries |
+| `ws` | Weekly Summary |
+| `se` | Search Entries |
+| `quit` / `exit` | Exit |
 
-2. **Quick actions**
-   - Alt+Tab to CLI → `2` → Description → Enter → `n` → `n`
-   - Practice the sequence!
+**Example:** Type `st` instead of `2` to start a timer instantly.
 
-3. **Create aliases (Advanced)**
-   ```bash
-   # Add to .bashrc or .bash_profile
-   alias tt='cd ~/toggl && python3 toggl_cli.py'
-   ```
+**Fuzzy Search:** When selecting projects or tags, type a partial name instead of a number:
+- `web` matches "Client A - Website"
+- `urg` matches "urgent"
+- Numbers still work as before
 
 ### Common Workflows
 
@@ -918,9 +918,11 @@ pip install requests
 **Problem:** Corrupted toggl_config.json
 
 **Solution:**
-1. Delete `toggl_config.json`
-2. Run option `1` (Login) to recreate
-3. Select workspace again
+The CLI now automatically recovers from corrupt config files by renaming them to `.corrupt.json` and starting fresh. You'll see a message like:
+```
+⚠️  Config corrupted — saved as toggl_config.json.corrupt.json, starting fresh
+```
+Simply run option `1` (Login) to set up again. Your old config is preserved as a backup.
 
 ---
 
@@ -1058,10 +1060,11 @@ For the full license text, see the [LICENSE](LICENSE) file or visit [gnu.org/lic
 ## 🎉 You're Ready!
 
 Start tracking your time like a pro. Remember:
-- **Press 2** to start
-- **Press 3** to stop  
-- **Press 4** to resume
-- **Press 7** for weekly insights
+- **Type `st`** to start (or press `2`)
+- **Type `sp`** to stop (or press `3`)
+- **Type `rt`** to resume (or press `4`)
+- **Type `ws`** for weekly insights (or press `7`)
 - **Press S** for advanced settings & caching
+- **Type partial names** when selecting projects/tags
 
 Happy time tracking! ⏱️

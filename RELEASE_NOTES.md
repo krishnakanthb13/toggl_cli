@@ -1,5 +1,35 @@
 # Release Notes
 
+## v1.2.0 - Reliability, UX & Robustness Update (July 2026)
+
+### 🐛 Bug Fixes
+- **Timezone consistency**: All API date queries now use UTC properly
+- **Summary cache key**: HTML reviewer uses ISO dates (YYYY-MM-DD) instead of localized format
+- **API timeouts**: 30-second timeout on all requests prevents infinite hangs
+- **HTTP 204 handling**: DELETE/PATCH operations no longer show as errors
+- **Atomic config writes**: Crash-safe saves using temp file + rename
+- **Corrupt config recovery**: Automatically renames bad config to `.corrupt.json`
+- **Multi-click guard**: Prevents duplicate AI summary generation
+- **Duplicate prevention**: Case-insensitive check prevents creating duplicate projects/tags
+
+### ⚡ Performance
+- **Recent project cache**: 5-minute cache for recent project IDs reduces API calls
+- **API retry**: Automatic single retry on transient network timeouts
+
+### ✨ UX Improvements
+- **Fuzzy search**: Type partial names instead of numbers for project/tag selection
+- **Recent projects**: Most-used projects shown at top of selection list
+- **CLI aliases**: Quick shortcuts (`st`=start, `sp`=stop, `rt`=resume, `ct`=current, `te`=today, `ws`=weekly, `se`=search)
+- **Server detection**: Python checked before http-server in .bat launchers
+- **Clear Cache button**: One-click reset of all cached data in HTML reviewer
+
+### 🔧 Code Quality
+- **Unicode support**: `ensure_ascii=False` preserves non-ASCII names in config
+- **Config versioning**: Version field added for future migrations
+- **Consistent UTC**: Log timestamps match API timestamps
+
+---
+
 ## v1.1.2 - Settings & Performance Update (January 2026)
 
 ### ⚙️ Enhanced Toggl Settings

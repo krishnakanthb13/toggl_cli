@@ -100,10 +100,25 @@ class TogglCLI:
     user_data: dict         # User profile data from Toggl
     cached_projects: list       # Cached projects (reduces API calls)
     cached_tags: list           # Cached tags (reduces API calls)
-    cached_organizations: list   # NEW: Cached organizations
-    cached_clients: list        # NEW: Cached clients
-    cached_tasks: list          # NEW: Cached tasks
-    cached_workspaces: list     # NEW: Cached workspaces
+    cached_organizations: list  # Cached organizations
+    cached_clients: list        # Cached clients
+    cached_tasks: list          # Cached tasks
+    cached_workspaces: list     # Cached workspaces
+    _recent_project_ids: set    # Cached recent project IDs (5-min TTL)
+    _recent_project_ids_ts: float  # Timestamp of last refresh
+    
+    # CLI Aliases
+    ALIASES = {
+        'st': '2',   # Start Timer
+        'sp': '3',   # Stop Timer
+        'rt': '4',   # Resume Timer
+        'ct': '5',   # Current Timer
+        'te': '6',   # Today's Entries
+        'ws': '7',   # Weekly Summary
+        'se': '8',   # Search
+        'quit': '0',
+        'exit': '0',
+    }
     
     # Core Methods (see below)
 ```
@@ -111,10 +126,12 @@ class TogglCLI:
 ### Design Pattern
 
 - **Monolithic class**: All functionality in `TogglCLI` class
-- **Menu-driven loop**: `run()` method contains main while loop
-- **API wrapper**: `api_request()` handles all HTTP calls
-- **Local logging**: Every action logged to `toggl_cli_logs.txt`
-- **Caching**: Projects and tags cached to reduce API calls
+- **Menu-driven loop**: `run()` method contains main while loop with alias resolution
+- **API wrapper**: `api_request()` handles all HTTP calls with retry and 204 handling
+- **Atomic config writes**: Uses temp file + `os.replace()` for crash safety
+- **Local logging**: Every action logged to `toggl_cli_logs.txt` in UTC
+- **Caching**: Projects, tags, and recent project IDs cached to reduce API calls
+- **Fuzzy search**: `_fuzzy_select()` allows partial name matching
 
 ---
 
@@ -172,11 +189,13 @@ class TogglCLI:
 
 | Method | Purpose |
 |--------|---------|
-| `api_request()` | Generic HTTP request wrapper with auth & error handling |
-| `log()` | Append timestamped message to toggl_cli_logs.txt |
-| `show_menu()` | Render the two-column categorized menu |
+| `api_request()` | Generic HTTP request wrapper with auth, timeout, retry, and 204 handling |
+| `log()` | Append UTC timestamped message to toggl_cli_logs.txt |
+| `show_menu()` | Render the two-column categorized menu with aliases |
 | `open_reports()` | Launch Toggl Reports in default browser |
-| `run()` | Main application loop |
+| `run()` | Main application loop with alias resolution |
+| `_fuzzy_select()` | Select item by number or partial name match |
+| `_get_recent_project_ids()` | Get today's recent project IDs (5-min cache) |
 
 ---
 
@@ -221,9 +240,10 @@ headers = {'Authorization': f'Basic {auth}'}
 - `datetime` - Time handling with timezone awareness
 - `json` - Config file read/write
 - `sys` - System exit handling
-- `os` - File path operations
+- `os` - File path operations, atomic rename
 - `base64` - API token encoding
 - `webbrowser` - Open Toggl Reports in browser
+- `time` - Cache timestamp tracking
 
 ### External Package
 - `requests` - HTTP client for API calls
