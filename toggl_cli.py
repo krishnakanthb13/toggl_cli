@@ -29,6 +29,8 @@ class TogglCLI:
         self.cached_clients = []   # Cached clients
         self.cached_tasks = []     # Cached tasks
         self.cached_workspaces = []  # Cached workspaces
+        self._recent_project_ids = None  # Cached recent project IDs
+        self._recent_project_ids_ts = 0  # Timestamp of last refresh
         self.load_config()
         self._start_session_log()
 
@@ -47,7 +49,13 @@ class TogglCLI:
                     self.cached_tasks = config.get('cached_tasks', [])
                     self.cached_workspaces = config.get('cached_workspaces', [])
             except Exception as e:
-                self.log(f"Error loading config: {e}")
+                corrupt_path = CONFIG_FILE + '.corrupt.json'
+                try:
+                    os.replace(CONFIG_FILE, corrupt_path)
+                    print(f"⚠️  Config corrupted — saved as {corrupt_path}, starting fresh")
+                except Exception:
+                    print(f"⚠️  Config corrupted — could not rename: {e}")
+                self.log(f"Error loading config (renamed to .corrupt): {e}")
 
     def _start_session_log(self):
         """Add a blank line to separate sessions in the log file"""
@@ -58,9 +66,10 @@ class TogglCLI:
             pass  # Silently ignore if log file can't be written
 
     def save_config(self, silent=False):
-        """Save configuration and cached data to file"""
+        """Save configuration and cached data to file (atomic write)"""
         try:
             config = {
+                'version': 1,
                 'api_token': self.api_token,
                 'workspace_id': self.workspace_id,
                 'cached_projects': self.cached_projects,
@@ -70,8 +79,10 @@ class TogglCLI:
                 'cached_tasks': self.cached_tasks,
                 'cached_workspaces': self.cached_workspaces
             }
-            with open(CONFIG_FILE, 'w') as f:
-                json.dump(config, f, indent=2)
+            tmp_path = CONFIG_FILE + '.tmp'
+            with open(tmp_path, 'w') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, CONFIG_FILE)
             if not silent:
                 print(f"✓ Configuration saved to {CONFIG_FILE}")
         except Exception as e:
@@ -79,7 +90,7 @@ class TogglCLI:
 
     def log(self, message):
         """Append log entry to toggl_cli_logs.txt"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"[{timestamp}] {message}\n"
         try:
             with open(LOG_FILE, 'a', encoding='utf-8') as f:
@@ -107,7 +118,7 @@ class TogglCLI:
         return names
 
     def api_request(self, method, endpoint, data=None):
-        """Make API request to Toggl"""
+        """Make API request to Toggl with single retry on timeout."""
         if not self.api_token:
             print("✗ Error: Not logged in. Please login first (Option 1)")
             return None
@@ -119,33 +130,44 @@ class TogglCLI:
             'Authorization': f'Basic {auth}'
         }
 
-        try:
-            if method == 'GET':
-                response = requests.get(url, headers=headers)
-            elif method == 'POST':
-                response = requests.post(url, headers=headers, json=data)
-            elif method == 'PATCH':
-                response = requests.patch(url, headers=headers, json=data)
-            elif method == 'PUT':
-                response = requests.put(url, headers=headers, json=data)
-            elif method == 'DELETE':
-                response = requests.delete(url, headers=headers)
-            else:
-                return None
+        for attempt in range(2):
+            try:
+                if method == 'GET':
+                    response = requests.get(url, headers=headers, timeout=30)
+                elif method == 'POST':
+                    response = requests.post(url, headers=headers, json=data, timeout=30)
+                elif method == 'PATCH':
+                    response = requests.patch(url, headers=headers, json=data, timeout=30)
+                elif method == 'PUT':
+                    response = requests.put(url, headers=headers, json=data, timeout=30)
+                elif method == 'DELETE':
+                    response = requests.delete(url, headers=headers, timeout=30)
+                else:
+                    return None
 
-            if response.status_code in [200, 201]:
-                return response.json()
-            else:
-                error_msg = f"API Error {response.status_code}: {response.text}"
+                if response.status_code in (200, 201):
+                    return response.json()
+                if response.status_code == 204:
+                    return {}
+                else:
+                    error_msg = f"API Error {response.status_code}: {response.text}"
+                    print(f"✗ {error_msg}")
+                    self.log(f"(Error): {error_msg}")
+                    return None
+
+            except requests.exceptions.Timeout:
+                if attempt == 0:
+                    print("⏱ Timeout, retrying...")
+                    continue
+                error_msg = "Network error: Request timed out after retry"
                 print(f"✗ {error_msg}")
                 self.log(f"(Error): {error_msg}")
                 return None
-
-        except requests.exceptions.RequestException as e:
-            error_msg = f"Network error: {e}"
-            print(f"✗ {error_msg}")
-            self.log(f"(Error): {error_msg}")
-            return None
+            except requests.exceptions.RequestException as e:
+                error_msg = f"Network error: {e}"
+                print(f"✗ {error_msg}")
+                self.log(f"(Error): {error_msg}")
+                return None
 
     def login(self):
         """Login and setup workspace"""
@@ -225,27 +247,31 @@ class TogglCLI:
         if use_project in ['y', 'yes']:
             projects = self.list_projects(return_data=True)
             if projects:
-                print("\n=== YOUR PROJECTS ===")
+                recent_ids = self._get_recent_project_ids()
+                recent = [p for p in projects if p['id'] in recent_ids]
+                if recent:
+                    print("\n=== RECENT PROJECTS ===")
+                    for idx, project in enumerate(recent, 1):
+                        active = "✓" if project.get('active', True) else "✗"
+                        print(f"{idx}. {project['name']} [{active}]")
+
+                print("\n=== ALL PROJECTS ===")
                 for idx, project in enumerate(projects, 1):
                     active = "✓" if project.get('active', True) else "✗"
                     print(f"{idx}. {project['name']} [{active}]")
                 print("P. Create New Project")
-                
-                choice = input("\nSelect project (number or P): ").strip()
-                
+
+                choice = input("\nSelect project (number, name, or P): ").strip()
+
                 if choice.lower() == 'p':
-                    # Create new project on-the-fly
                     project_id, project_name = self._quick_create_project()
                 else:
-                    try:
-                        choice_num = int(choice)
-                        if 1 <= choice_num <= len(projects):
-                            project_id = projects[choice_num - 1]['id']
-                            project_name = projects[choice_num - 1]['name']
-                        else:
-                            print("✗ Invalid selection, no project assigned")
-                    except ValueError:
-                        print("✗ Invalid selection, no project assigned")
+                    selected = self._fuzzy_select(projects, "")
+                    if selected:
+                        project_id = selected['id']
+                        project_name = selected['name']
+                    else:
+                        print("✗ No project assigned")
             else:
                 # No projects exist, offer to create one
                 print("\nℹ No projects found.")
@@ -266,26 +292,33 @@ class TogglCLI:
                 for idx, tag in enumerate(tags, 1):
                     print(f"{idx}. {tag['name']}")
                 print("T. Create New Tag")
-                
-                tag_input = input("\nEnter tags (numbers, T for new, comma-separated): ").strip()
-                
-                # Process mixed input (e.g., "1,T,3")
+
+                tag_input = input("\nEnter tags (numbers, names, T for new, comma-separated): ").strip()
+
+                # Process mixed input (e.g., "1,T,3" or "1,urgent,3")
                 for item in tag_input.split(','):
                     item = item.strip()
                     if item.lower() == 't':
-                        # Create new tag on-the-fly
                         new_tag_id = self._quick_create_tag()
                         if new_tag_id:
                             tag_ids.append(new_tag_id)
-                            # Update tags list for future reference in this session
                             tags = self.cached_tags
                     else:
+                        # Try number first
                         try:
                             choice_num = int(item)
                             if 1 <= choice_num <= len(tags):
                                 tag_ids.append(tags[choice_num - 1]['id'])
+                                continue
                         except ValueError:
-                            pass  # Skip invalid entries
+                            pass
+                        # Fuzzy match by name
+                        choice_lower = item.lower()
+                        matches = [t for t in tags if choice_lower in t.get('name', '').lower()]
+                        if len(matches) == 1:
+                            tag_ids.append(matches[0]['id'])
+                        elif len(matches) > 1:
+                            print(f"  ⚠ Ambiguous tag '{item}' — {len(matches)} matches, skipping")
                 
                 if not tag_ids:
                     print("✗ No valid tags selected")
@@ -465,10 +498,15 @@ class TogglCLI:
         """Quick project creation for on-the-fly use during timer start.
         Returns (project_id, project_name) on success, (None, None) on failure."""
         name = input("New project name: ").strip()
-        
+
         if not name:
             print("✗ Project name cannot be empty")
             return None, None
+
+        for p in self.cached_projects:
+            if p.get('name', '').strip().casefold() == name.strip().casefold():
+                print(f"✗ Project '{name}' already exists (use option 11 to see all)")
+                return None, None
 
         data = {
             "name": name,
@@ -483,6 +521,7 @@ class TogglCLI:
             self.log(f"(Create Project): {name}")
             # Add to cache directly (no extra API call)
             self.cached_projects.append(result)
+            self._recent_project_ids = None  # Invalidate recent project cache
             self.save_config(silent=True)
             return result.get('id'), name
         else:
@@ -493,10 +532,15 @@ class TogglCLI:
         """Quick tag creation for on-the-fly use during timer start.
         Returns tag_id on success, None on failure."""
         name = input("New tag name: ").strip()
-        
+
         if not name:
             print("✗ Tag name cannot be empty")
             return None
+
+        for t in self.cached_tags:
+            if t.get('name', '').strip().casefold() == name.strip().casefold():
+                print(f"✗ Tag '{name}' already exists (use option 12 to see all)")
+                return None
 
         data = {"name": name}
 
@@ -512,6 +556,55 @@ class TogglCLI:
         else:
             print("✗ Failed to create tag")
             return None
+
+    def _fuzzy_select(self, items, prompt_text="Select"):
+        """Let user type a number OR partial name to select from a list."""
+        choice = input(prompt_text).strip()
+        # Try as number first
+        try:
+            idx = int(choice)
+            if 1 <= idx <= len(items):
+                return items[idx - 1]
+            print(f"✗ Number out of range (1-{len(items)})")
+            return None
+        except ValueError:
+            pass
+        # Fuzzy match by name
+        choice_lower = choice.lower()
+        matches = [i for i in items if choice_lower in i.get('name', '').lower()]
+        if len(matches) == 1:
+            return matches[0]
+        elif len(matches) > 1:
+            print(f"✗ Ambiguous — {len(matches)} matches. Be more specific.")
+        else:
+            print(f"✗ No match for '{choice}'")
+        return None
+
+    def _get_recent_project_ids(self, limit=5):
+        """Get project IDs from today's most recent entries (cached for 5 min)."""
+        import time
+        now = time.time()
+        if self._recent_project_ids is not None and (now - self._recent_project_ids_ts) < 300:
+            return self._recent_project_ids
+
+        if not self.workspace_id:
+            return set()
+        start_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat().replace('+00:00', 'Z')
+        end_date = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        entries = self.api_request('GET', f'/me/time_entries?start_date={start_date}&end_date={end_date}')
+        if not entries:
+            return set()
+        recent_ids = set()
+        for e in reversed(entries[-10:]):
+            pid = e.get('project_id')
+            if pid:
+                recent_ids.add(pid)
+                if len(recent_ids) >= limit:
+                    break
+
+        self._recent_project_ids = recent_ids
+        self._recent_project_ids_ts = now
+        return recent_ids
 
     def create_project(self):
         """Create a new project"""
@@ -586,7 +679,7 @@ class TogglCLI:
             return
 
         # Get entries from today
-        start_date = datetime.now().replace(hour=0, minute=0, second=0).isoformat() + "Z"
+        start_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat().replace('+00:00', 'Z')
         end_date = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
         entries = self.api_request('GET', f'/me/time_entries?start_date={start_date}&end_date={end_date}')
@@ -705,7 +798,7 @@ class TogglCLI:
             return
 
         # Get recent entries
-        start_date = (datetime.now() - timedelta(days=7)).replace(hour=0, minute=0, second=0).isoformat() + "Z"
+        start_date = (datetime.now(timezone.utc) - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat().replace('+00:00', 'Z')
         end_date = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         entries = self.api_request('GET', f'/me/time_entries?start_date={start_date}&end_date={end_date}')
 
@@ -758,26 +851,21 @@ class TogglCLI:
                     for idx, project in enumerate(projects, 1):
                         active = "✓" if project.get('active', True) else "✗"
                         print(f"{idx}. {project['name']} [{active}]")
-                    print("P. Create New Project")
-                    
-                    proj_choice = input("\nSelect project (number, P for new, 0 for none): ").strip()
-                    
+                    print("P. Create New Project  |  0. No Project")
+
+                    proj_choice = input("\nSelect project (number, name, P, or 0): ").strip()
+
                     if proj_choice == '0':
                         update_data['project_id'] = None
                     elif proj_choice.lower() == 'p':
-                        # Create new project on-the-fly
                         new_project_id, _ = self._quick_create_project()
                         if new_project_id:
                             update_data['project_id'] = new_project_id
                     else:
-                        try:
-                            choice_num = int(proj_choice)
-                            if 1 <= choice_num <= len(projects):
-                                update_data['project_id'] = projects[choice_num - 1]['id']
-                            else:
-                                print("Invalid selection")
-                                return
-                        except ValueError:
+                        selected = self._fuzzy_select(projects, "")
+                        if selected:
+                            update_data['project_id'] = selected['id']
+                        else:
                             print("Invalid selection")
                             return
                 else:
@@ -795,19 +883,17 @@ class TogglCLI:
                     print("\n=== YOUR TAGS ===")
                     for idx, tag in enumerate(tags, 1):
                         print(f"{idx}. {tag['name']}")
-                    print("T. Create New Tag")
-                    
-                    tag_input = input("\nEnter tags (numbers, T for new, 0 for none): ").strip()
-                    
+                    print("T. Create New Tag  |  0. No Tags")
+
+                    tag_input = input("\nEnter tags (numbers, names, T for new, comma-separated): ").strip()
+
                     if tag_input == '0':
                         update_data['tag_ids'] = []
                     else:
                         tag_ids = []
-                        # Process mixed input (e.g., "1,T,3")
                         for item in tag_input.split(','):
                             item = item.strip()
                             if item.lower() == 't':
-                                # Create new tag on-the-fly
                                 new_tag_id = self._quick_create_tag()
                                 if new_tag_id:
                                     tag_ids.append(new_tag_id)
@@ -817,8 +903,15 @@ class TogglCLI:
                                     choice_num = int(item)
                                     if 1 <= choice_num <= len(tags):
                                         tag_ids.append(tags[choice_num - 1]['id'])
+                                        continue
                                 except ValueError:
-                                    pass  # Skip invalid entries
+                                    pass
+                                choice_lower = item.lower()
+                                matches = [t for t in tags if choice_lower in t.get('name', '').lower()]
+                                if len(matches) == 1:
+                                    tag_ids.append(matches[0]['id'])
+                                elif len(matches) > 1:
+                                    print(f"  ⚠ Ambiguous tag '{item}' — {len(matches)} matches, skipping")
                         
                         if tag_ids:
                             update_data['tag_ids'] = tag_ids
@@ -872,7 +965,7 @@ class TogglCLI:
 
         # Get recent entries
         from datetime import timedelta
-        start_date = (datetime.now() - timedelta(days=7)).replace(hour=0, minute=0, second=0).isoformat() + "Z"
+        start_date = (datetime.now(timezone.utc) - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat().replace('+00:00', 'Z')
         end_date = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         entries = self.api_request('GET', f'/me/time_entries?start_date={start_date}&end_date={end_date}')
 
@@ -996,7 +1089,7 @@ class TogglCLI:
 
         # Get entries from last 30 days
         from datetime import timedelta
-        start_date = (datetime.now() - timedelta(days=30)).isoformat() + "Z"
+        start_date = (datetime.now(timezone.utc) - timedelta(days=30)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat().replace('+00:00', 'Z')
         end_date = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         entries = self.api_request('GET', f'/me/time_entries?start_date={start_date}&end_date={end_date}')
 
@@ -1018,13 +1111,12 @@ class TogglCLI:
             for idx, project in enumerate(projects, 1):
                 active = "✓" if project.get('active', True) else "✗"
                 print(f"{idx}. {project['name']} [{active}]")
-            try:
-                proj_choice = int(input("\nSelect project number: "))
-                if 1 <= proj_choice <= len(projects):
-                    project_id = projects[proj_choice - 1]['id']
-                    filtered = [e for e in entries if e.get('project_id') == project_id and e.get('duration', 0) > 0]
-            except ValueError:
-                print("✗ Invalid selection")
+            selected = self._fuzzy_select(projects, "\nSelect project: ")
+            if selected:
+                project_id = selected['id']
+                filtered = [e for e in entries if e.get('project_id') == project_id and e.get('duration', 0) > 0]
+            else:
+                print("✗ No project selected")
                 return
 
         elif choice == '3':
@@ -1034,13 +1126,12 @@ class TogglCLI:
             print("\n=== YOUR TAGS ===")
             for idx, tag in enumerate(tags, 1):
                 print(f"{idx}. {tag['name']}")
-            try:
-                tag_choice = int(input("\nSelect tag number: "))
-                if 1 <= tag_choice <= len(tags):
-                    tag_id = tags[tag_choice - 1]['id']
-                    filtered = [e for e in entries if tag_id in e.get('tag_ids', []) and e.get('duration', 0) > 0]
-            except ValueError:
-                print("✗ Invalid selection")
+            selected = self._fuzzy_select(tags, "\nSelect tag: ")
+            if selected:
+                tag_id = selected['id']
+                filtered = [e for e in entries if tag_id in e.get('tag_ids', []) and e.get('duration', 0) > 0]
+            else:
+                print("✗ No tag selected")
                 return
 
         elif choice == '4':
@@ -1684,6 +1775,19 @@ class TogglCLI:
         except Exception as e:
             print(f"✗ Failed to open browser: {e}")
 
+    # CLI aliases for power users
+    ALIASES = {
+        'st': '2',   # Start Timer
+        'sp': '3',   # Stop Timer
+        'rt': '4',   # Resume Timer
+        'ct': '5',   # Current Timer
+        'te': '6',   # Today's Entries
+        'ws': '7',   # Weekly Summary
+        'se': '8',   # Search
+        'quit': '0',
+        'exit': '0',
+    }
+
     def show_menu(self):
         """Display main menu"""
         print("\n" + "="*60)
@@ -1692,10 +1796,10 @@ class TogglCLI:
         print("  ⚡ ACTIONS                 │  📊 REPORTS & MANAGEMENT")
         print("─"*29 + "┼" + "─"*30)
         print("  1. 🛠  Login / Setup        │     6. 📅 Today's Entries")
-        print("  2. ▶  Start Timer          │     7. 📅 Weekly Summary")
-        print("  3. ⏹  Stop Timer           │     8. 📅 Search Entries")
-        print("  4. ⏯  Resume Last Timer    │     9. 📅 Edit Entry")
-        print("  5. ⏱  Current Timer        │    10. 📅 Delete Entry")
+        print("  2. ▶  Start Timer  (st)    │     7. 📅 Weekly Summary (ws)")
+        print("  3. ⏹  Stop Timer   (sp)    │     8. 📅 Search Entries (se)")
+        print("  4. ⏯  Resume Timer (rt)    │     9. 📅 Edit Entry")
+        print("  5. ⏱  Current Timer(ct)    │    10. 📅 Delete Entry")
         print("                             │    11. 📅 List Projects")
         print("  📁 CREATE | 0. Exit        │    12. 📅 List Tags")
         print("─"*29 + "┼" + "─"*30)
@@ -1709,6 +1813,7 @@ class TogglCLI:
             try:
                 self.show_menu()
                 choice = input("\nSelect option: ").strip()
+                choice = self.ALIASES.get(choice.lower(), choice)
 
                 if choice == '1':
                     self.login()

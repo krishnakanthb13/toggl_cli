@@ -73,6 +73,7 @@ Outputs: Renders interactive UI with entry lists, date navigation, AI summary di
         const Sparkles = ({ className }) => <Icon name="sparkles" className={className} />;
         const Key = ({ className }) => <Icon name="key" className={className} />;
         const X = ({ className }) => <Icon name="x" className={className} />;
+        const Trash = ({ className }) => <Icon name="trash-2" className={className} />;
 
         const TimeTracker = () => {
             const [entries, setEntries] = React.useState([]);
@@ -283,6 +284,8 @@ Use professional but encouraging tone and provide points.`,
                     return;
                 }
 
+                if (isGenerating) return;
+
                 setIsGenerating(true);
                 // setSummary(null); // Don't clear immediately, allows invalidation visual if needed, but for now just overwrite on success
 
@@ -490,6 +493,23 @@ Use professional but encouraging tone and provide points.`,
                                         <Upload className="w-3 h-3 mr-1" />
                                         Save AI Log
                                     </button>
+                                    <button
+                                        onClick={() => {
+                                            if (confirm('Clear all cached data? This will remove saved summaries and log data.')) {
+                                                localStorage.removeItem('toggl_cli_data');
+                                                localStorage.removeItem('toggl_cli_summaries');
+                                                localStorage.removeItem('toggl_cli_ai_log');
+                                                setSummaries({});
+                                                setEntries([]);
+                                                setView('upload');
+                                            }
+                                        }}
+                                        className="text-gray-500 hover:text-red-400 text-xs flex items-center"
+                                        title="Clear All Cache"
+                                    >
+                                        <Trash className="w-3 h-3 mr-1" />
+                                        Clear Cache
+                                    </button>
                                 </div>
                             </div>
 
@@ -498,7 +518,7 @@ Use professional but encouraging tone and provide points.`,
                                     {formatDate(selectedDate)}
                                 </h2>
                                 <button
-                                    onClick={() => generateSummary(dateEntries, formatDate(selectedDate))}
+                                    onClick={() => generateSummary(dateEntries, selectedDate)}
                                     disabled={isGenerating}
                                     className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded text-sm flex items-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
@@ -550,14 +570,14 @@ Use professional but encouraging tone and provide points.`,
                             )}
 
                             {/* Summary Section */}
-                            {summaries[formatDate(selectedDate)] && (
+                            {summaries[selectedDate] && (
                                 <div className="mb-4 bg-purple-900/20 border border-purple-500/30 rounded-lg p-4">
                                     <h3 className="text-purple-300 font-semibold mb-2 flex items-center">
                                         <Sparkles className="w-4 h-4 mr-2" />
                                         Daily Summary
                                     </h3>
                                     <div className="text-gray-300 text-sm">
-                                        <Markdown content={summaries[formatDate(selectedDate)]} />
+                                        <Markdown content={summaries[selectedDate]} />
                                     </div>
                                 </div>
                             )}
